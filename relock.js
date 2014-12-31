@@ -83,30 +83,44 @@ function walk (data, packages) {
 }
 
 function getShasum (cache, name, version) {
-  var sha;
-  try {
-    // find sha in cache/name/version/.cache.json
-    sha = require(path.resolve(path.join(cache, name, version, ".cache.json"))).dist.shasum;
-  } catch (e) {
-    try {
-      // find sha in cache/name/.cache.json
-      sha = require(path.resolve(path.join(cache, name, ".cache.json"))).versions[version].dist.shasum;
-    } catch (e) {
-      try  {
-        // find sha in cache/regHost/name/version/.cache.json
-        sha = require(path.resolve(path.join(cache, regHost, name, version, ".cache.json"))).dist.shasum;
-      } catch (e) {
-        // find sha in cache/regHost/name/.cache.json
-        sha = require(path.resolve(path.join(cache, regHost, name, ".cache.json"))).versions[version].dist.shasum
-      }
-    }
+  var json = readFirst([
+      // cache/name/version/.cache.json
+      path.resolve(path.join(cache, name, version, ".cache.json")),
+      // cache/name/.cache.json
+      path.resolve(path.join(cache, name, ".cache.json")),
+      // cache/regHost/name/version/.cache.json
+      path.resolve(path.join(cache, regHost, name, version, ".cache.json")),
+      // cache/regHost/name/.cache.json
+      path.resolve(path.join(cache, regHost, name, ".cache.json")),
+      // cache/name/version/package/package.json
+      path.resolve(path.join(cache, name, version, "package", "package.json"))
+    ]),
+    shasum;
+
+  if (!json) {
+    console.error("Warning: no cache config for " + name + "@" + version);
+    return "*";
   }
-  // finally, check in the tmp directory
-  if (!sha && cache !== tmp) return getShasum(tmp, name, version);
 
-  if (!sha) console.error("Warning: no shasum for "+name+"@"+version);
+  shasum =
+    (json.dist && json.dist.shasum) ||
+    (json.versions && json.versions[version] && json.versions[version].dist && json.versions[version].dist.shasum) ||
+    json._shasum;
 
-  return sha || "*";
+  if (!shasum) {
+    console.error("Warning: no shasum for " + name + "@" + version);
+    return "*";
+  }
+  return shasum;
+}
+
+function readFirst (filePaths) {
+  while (filePaths.length) {
+    if (fs.existsSync(filePaths[0])) {
+      return JSON.parse(fs.readFileSync(filePaths[0]));
+    }
+    filePaths.shift();
+  }
 }
 
 exports.relock = relock;
